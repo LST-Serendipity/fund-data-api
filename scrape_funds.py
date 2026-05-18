@@ -6,31 +6,59 @@ from datetime import datetime
 import pandas as pd
 
 def get_all_funds_basic():
-    """获取所有开放式基金基本信息"""
+    """获取所有开放式基金基本信息（使用最新稳定接口）"""
     print("正在获取所有开放式基金基本信息...")
     try:
-        fund_df = ak.fund_open_fund_info_em()
+        # 2026年5月最新接口：fund_name_em 获取所有基金基本信息
+        fund_name_df = ak.fund_name_em()
+        
+        # 2026年5月最新接口：fund_open_fund_daily_em 获取最新净值数据
+        print("正在获取最新基金净值数据...")
+        fund_daily_df = ak.fund_open_fund_daily_em()
+        
+        # 合并两个数据集
+        fund_df = pd.merge(
+            fund_name_df, 
+            fund_daily_df, 
+            on=["基金代码", "基金简称"], 
+            how="left"
+        )
+        
         funds = []
         for _, row in fund_df.iterrows():
             fund = {
                 "code": str(row["基金代码"]),
                 "name": str(row["基金简称"]),
-                "type": str(row["基金类型"]),
-                "net_value": float(row["单位净值"]) if not pd.isna(row["单位净值"]) else None,
-                "daily_growth": float(row["日增长率"]) if not pd.isna(row["日增长率"]) else None,
-                "establish_date": str(row["成立日期"]) if not pd.isna(row["成立日期"]) else None,
-                "fund_manager": str(row["基金经理"]) if not pd.isna(row["基金经理"]) else None,
-                "fund_size": float(row["基金规模"]) if not pd.isna(row["基金规模"]) else None,
-                "company": str(row["基金公司"]) if not pd.isna(row["基金公司"]) else None
+                "type": str(row["基金类型"]) if "基金类型" in row and not pd.isna(row["基金类型"]) else "未知",
+                "net_value": float(row["单位净值"]) if "单位净值" in row and not pd.isna(row["单位净值"]) else None,
+                "daily_growth": float(row["日增长率"]) if "日增长率" in row and not pd.isna(row["日增长率"]) else None,
+                "pinyin": str(row["拼音缩写"]) if "拼音缩写" in row and not pd.isna(row["拼音缩写"]) else ""
             }
             funds.append(fund)
         return funds
     except Exception as e:
         print(f"获取基金基本信息失败: {e}")
-        return []
+        # 备用方案：只使用fund_name_em
+        try:
+            print("尝试使用备用方案获取基金列表...")
+            fund_name_df = ak.fund_name_em()
+            funds = []
+            for _, row in fund_name_df.iterrows():
+                funds.append({
+                    "code": str(row["基金代码"]),
+                    "name": str(row["基金简称"]),
+                    "type": str(row["基金类型"]) if "基金类型" in row and not pd.isna(row["基金类型"]) else "未知",
+                    "net_value": None,
+                    "daily_growth": None,
+                    "pinyin": str(row["拼音缩写"]) if "拼音缩写" in row and not pd.isna(row["拼音缩写"]) else ""
+                })
+            return funds
+        except Exception as e2:
+            print(f"备用方案也失败: {e2}")
+            return []
 
 def get_fund_ranks():
-    """获取各类基金排名"""
+    """获取各类基金排名（使用最新接口）"""
     print("正在获取基金排名数据...")
     ranks = {}
     fund_types = ["股票型", "混合型", "债券型", "指数型", "QDII", "FOF"]
@@ -40,7 +68,8 @@ def get_fund_ranks():
         ranks[fund_type] = {}
         for period in periods:
             try:
-                rank_df = ak.fund_open_fund_rank_em(symbol=fund_type, period=period)
+                # 2026年5月最新接口：fund_open_fund_rank_em 参数改为indicator
+                rank_df = ak.fund_open_fund_rank_em(symbol=fund_type, indicator=period)
                 ranks[fund_type][period] = []
                 for _, row in rank_df.head(50).iterrows():
                     ranks[fund_type][period].append({
